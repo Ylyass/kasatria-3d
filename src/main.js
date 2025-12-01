@@ -174,6 +174,15 @@ function createTiles(people) {
     objectCSS.position.y = Math.random() * 4000 - 2000;
     objectCSS.position.z = Math.random() * 4000 - 2000;
 
+    // Ensure element doesn't get culled by browser
+    element.style.backfaceVisibility = "visible";
+    element.style.webkitBackfaceVisibility = "visible";
+    element.style.willChange = "transform";
+    element.style.visibility = "visible";
+    element.style.opacity = "1";
+    element.style.transformStyle = "preserve-3d";
+    element.style.webkitTransformStyle = "preserve-3d";
+
     scene.add(objectCSS);
     objects.push(objectCSS);
   });
@@ -358,6 +367,19 @@ function animate(now) {
 function render() {
   if (renderer && camera && scene) {
     renderer.render(scene, camera);
+    
+    // Force all card elements to remain visible (prevent browser culling)
+    objects.forEach((obj) => {
+      if (obj.element) {
+        const element = obj.element;
+        // Ensure element is always visible regardless of transform
+        element.style.visibility = "visible";
+        element.style.opacity = "1";
+        element.style.display = "flex";
+        element.style.backfaceVisibility = "visible";
+        element.style.webkitBackfaceVisibility = "visible";
+      }
+    });
   }
 }
 
@@ -411,8 +433,8 @@ function setupScene() {
   camera = new THREE.PerspectiveCamera(
     40,
     window.innerWidth / window.innerHeight,
-    1,
-    10000
+    0.1, // Reduced near plane for better close-up rendering
+    20000 // Increased far plane to prevent distant objects from being clipped
   );
   camera.position.z = 3200;
 
@@ -424,6 +446,13 @@ function setupScene() {
   renderer.domElement.style.top = "0";
   renderer.domElement.style.left = "0";
   renderer.domElement.style.pointerEvents = "none";
+  // Prevent clipping and culling issues
+  renderer.domElement.style.overflow = "visible";
+  renderer.domElement.style.clip = "none";
+  renderer.domElement.style.clipPath = "none";
+  renderer.domElement.style.willChange = "transform";
+  renderer.domElement.style.backfaceVisibility = "visible";
+  renderer.domElement.style.webkitBackfaceVisibility = "visible";
   container.appendChild(renderer.domElement);
 
   controls = new TrackballControls(camera, renderer.domElement);
