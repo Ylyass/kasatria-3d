@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kasatria 3D Visualization – Ylyas</title>
+
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        background: radial-gradient(circle at top, #020617, #020617 35%, #000 100%);
+        color: #f9fafb;
+      }
+
+      body {
+        position: relative;
+      }
+
+      #login-screen,
+      #app-screen {
+        position: absolute;
+        inset: 0;
+      }
+
+      #login-screen {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      #app-screen {
+        display: none;
+      }
+
+      /* Login card */
+      .login-card {
+        background: radial-gradient(circle at top, rgba(15, 23, 42, 0.98), #020617);
+        border-radius: 24px;
+        padding: 32px 36px 28px;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.9);
+        border: 1px solid rgba(148, 163, 184, 0.4);
+        text-align: center;
+        max-width: 420px;
+        width: 100%;
+      }
+
+      .login-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      .login-subtitle {
+        font-size: 0.9rem;
+        color: rgba(209, 213, 219, 0.9);
+        margin-bottom: 24px;
+      }
+
+      #g_id_signin {
+        display: flex;
+        justify-content: center;
+      }
+
+      /* 3D container + buttons */
+      #container {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      #container > * {
+        pointer-events: auto;
+      }
+
+      /* Ensure buttons container is always above 3D scene */
+      #app-screen {
+        position: relative;
+        z-index: 1;
+      }
+
+      .buttons {
+        position: fixed !important;
+        bottom: 28px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        display: flex !important;
+        gap: 10px;
+        z-index: 99999 !important;
+        pointer-events: auto !important;
+        will-change: transform;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+
+      .buttons button {
+        padding: 10px 24px;
+        border-radius: 999px;
+        border: 1px solid rgba(148, 163, 184, 0.6);
+        background: rgba(15, 23, 42, 0.9);
+        color: #f9fafb;
+        font-size: 0.8rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        cursor: pointer;
+        transition: background 0.15s ease, border-color 0.15s ease,
+          transform 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      .buttons button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.9);
+      }
+
+      .buttons button.active {
+        background: rgba(248, 250, 252, 0.14);
+        border-color: #ffffff;
+      }
+
+      /* Profile cards – tall, sharp, glowing frame */
+      .element {
+        --accent-color: #4b5563;
+        --fill-color: #020617;
+
+        position: relative;
+        width: 180px;
+        height: 280px; /* tall portrait card */
+        border-radius: 4px; /* sharp corners */
+        padding: 12px 14px 14px;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+
+        background-color: var(--fill-color); /* transparent fill - will be overridden by inline style */
+        color: #f9fafb;
+        overflow: hidden;
+        transform-origin: center;
+        pointer-events: auto;
+        z-index: 1;
+
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.9); /* drop shadow only */
+        transition: transform 0.16s ease;
+      }
+
+      /* Neon-style border + outer glow */
+      .element::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+
+        /* Sharp, solid bright border in the card's color - sharp inner stroke */
+        border: 2px solid var(--accent-color);
+        
+        /* Neon-style outer glow: soft, diffused glow outside the border */
+        /* Larger blur radius creates bigger, more visible neon glow */
+        /* Multiple layers with increasing blur radius create smooth fade from color to black */
+        box-shadow:
+          0 0 20px var(--accent-color),
+          0 0 40px var(--accent-color),
+          0 0 60px var(--accent-color);
+        opacity: 0.85;
+        pointer-events: none;
+        transition: box-shadow 0.3s ease, opacity 0.3s ease, border-color 0.3s ease, filter 0.3s ease;
+      }
+
+      .element:hover {
+        transform: translateY(-6px) scale(1.04);
+      }
+
+      .element:hover::before {
+        /* Brighter border on hover - border lights up */
+        border-color: var(--accent-color);
+        filter: brightness(1.4);
+        /* Stronger neon glow on hover - much bigger and more intense blur */
+        /* Both border and soft blur light up together */
+        box-shadow:
+          0 0 15px var(--accent-color),
+          0 0 30px var(--accent-color),
+          0 0 50px var(--accent-color),
+          0 0 70px var(--accent-color),
+          0 0 90px var(--accent-color);
+        opacity: 1;
+      }
+
+      .element-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 0.7rem;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: rgba(226, 232, 240, 0.9);
+      }
+
+      .element-photo {
+        margin: 12px 0;
+        width: 100%;
+        aspect-ratio: 1 / 1; /* square photo */
+        border-radius: 2px;
+        overflow: hidden;
+        background-color: #020617;
+        background-size: cover;
+        background-position: center;
+      }
+
+      .element-footer {
+        text-align: center;
+        margin-top: 4px;
+      }
+
+      .element-name {
+        font-size: 0.96rem;
+        font-weight: 600;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .element-interest {
+        font-size: 0.78rem;
+        color: rgba(209, 213, 219, 0.9);
+        margin-top: 2px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Login Screen -->
+    <section id="login-screen">
+      <div class="login-card">
+        <h1 class="login-title">Welcome to the 3D Dashboard</h1>
+        <p class="login-subtitle">
+          Sign in with your Google account to access the interactive 3D
+          visualization experience.
+        </p>
+        <div id="g_id_signin"></div>
+      </div>
+    </section>
+
+    <!-- App Screen -->
+    <section id="app-screen">
+      <div id="container"></div>
+      <div class="buttons">
+        <button id="btn-table">TABLE</button>
+        <button id="btn-sphere">SPHERE</button>
+        <button id="btn-helix">HELIX</button>
+        <button id="btn-grid">GRID</button>
+      </div>
+    </section>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
