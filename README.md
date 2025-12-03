@@ -1,5 +1,9 @@
 # Kasatria 3D Visualization Assignment
 
+🌐 Live Demo
+🔗 https://kasatria-3d.vercel.app/
+
+
 A submission for the **Kasatria Internship Preliminary Assignment**.
 
 This project is an interactive 3D visualization dashboard that displays user data in various 3D layouts. The application features Google authentication, dynamic data loading from Google Sheets, and smooth 3D transitions between different visualization modes.
