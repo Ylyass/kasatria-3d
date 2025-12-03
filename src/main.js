@@ -21,6 +21,8 @@ const targets = {
   sphere: [],
   helix: [],
   grid: [],
+  pyramid: [],
+  triangle: [],
 };
 
 // simple internal transition list (no external tween lib)
@@ -302,6 +304,224 @@ function createTargetsGrid(count) {
   }
 }
 
+function createTargetsPyramid(count) {
+  targets.pyramid.length = 0;
+  if (count === 0) return;
+
+  // Spacing configuration - matching other layouts
+  const cardSpacing = 220; // Horizontal spacing between cards
+  
+  // Calculate how many rows per face we can support
+  // Each triangular face has rows: 1, 2, 3, ..., R cards
+  // Cards per face = 1 + 2 + ... + R = R(R+1)/2
+  // The top card (row 1) is shared by all 3 faces
+  // So total cards needed = 1 (shared top) + 3 × (2 + 3 + ... + R)
+  // = 1 + 3 × (R(R+1)/2 - 1) = 1 + 3 × (R(R+1) - 2)/2
+  
+  // Find largest R such that 1 + 3 × (R(R+1) - 2)/2 ≤ count
+  let R = 1;
+  let totalNeeded = 1; // The shared top card
+  while (R < 50) {
+    const nextTotal = 1 + 3 * ((R + 1) * (R + 2) - 2) / 2;
+    if (nextTotal > count) break;
+    R++;
+    totalNeeded = nextTotal;
+  }
+  R = Math.max(1, R);
+  
+  const cardsPerFace = (R * (R + 1)) / 2;
+  const extraCards = count - totalNeeded;
+  
+  // Define the 3 side faces of the tetrahedron
+  // They meet at a top apex and are rotated 120° apart around vertical axis
+  const apexHeight = 1400; // Height of the pyramid apex
+  const baseRadius = 1600; // Radius of the base triangle
+  
+  // Top apex point (shared by all 3 faces)
+  const apex = new THREE.Vector3(0, apexHeight, 0);
+  
+  // Base vertices of the 3 side faces (forming an equilateral triangle in the horizontal plane)
+  // These are rotated 120° apart around the vertical axis
+  const baseVertices = [];
+  for (let i = 0; i < 3; i++) {
+    const angle = (i * 2 * Math.PI) / 3 - Math.PI / 2; // Start at top, rotate 120°
+    const x = baseRadius * Math.cos(angle);
+    const z = baseRadius * Math.sin(angle);
+    baseVertices.push(new THREE.Vector3(x, 0, z));
+  }
+  
+  let cardIndex = 0;
+  
+  // Place the shared top card at the apex
+  const topObject = new THREE.Object3D();
+  topObject.position.copy(apex);
+  
+  // Face outward (toward the viewer, slightly downward)
+  const lookAtPoint = new THREE.Vector3(0, apexHeight * 0.4, baseRadius * 0.6);
+  topObject.lookAt(lookAtPoint);
+  
+  targets.pyramid.push(topObject);
+  cardIndex++;
+  
+  // Distribute remaining cards across the 3 side faces
+  // Each face gets rows 2, 3, ..., R (excluding the shared top row 1)
+  // Extra cards go to the bottom rows of the faces
+  
+  // Calculate how many extra cards each face gets
+  const baseCardsPerFace = cardsPerFace - 1; // Exclude row 1 (shared top)
+  const extraPerFace = Math.floor(extraCards / 3);
+  const remainderExtras = extraCards % 3;
+  
+  for (let faceIdx = 0; faceIdx < 3; faceIdx++) {
+    const baseV1 = baseVertices[faceIdx];
+    const baseV2 = baseVertices[(faceIdx + 1) % 3];
+    
+    // Calculate how many cards this face gets (including extras)
+    let cardsForThisFace = baseCardsPerFace + extraPerFace;
+    if (faceIdx < remainderExtras) {
+      cardsForThisFace += 1; // Distribute remainder extras
+    }
+    
+    // Determine how many rows this face needs
+    let rowsForThisFace = R;
+    let cardsInRows = 0;
+    for (let r = 2; r <= R; r++) {
+      cardsInRows += r;
+      if (cardsInRows >= cardsForThisFace) {
+        rowsForThisFace = r;
+        break;
+      }
+    }
+    
+    // Calculate face normal for orientation (don't modify this)
+    const edge1 = new THREE.Vector3().subVectors(baseV1, apex);
+    const edge2 = new THREE.Vector3().subVectors(baseV2, apex);
+    const faceNormal = new THREE.Vector3().crossVectors(edge1, edge2).normalize();
+    
+    // Place cards on this face, starting from row 2
+    let cardsPlacedOnFace = 0;
+    for (let row = 2; row <= rowsForThisFace && cardIndex < count; row++) {
+      const cardsInRow = row;
+      const actualCardsInRow = Math.min(cardsInRow, cardsForThisFace - cardsPlacedOnFace);
+      
+      for (let col = 0; col < actualCardsInRow && cardIndex < count; col++) {
+        // Calculate position within the row
+        // t: how far down the face (0 = apex, 1 = base edge)
+        // Use row number to determine position (row 2 is closer to apex than row R)
+        const t = (row - 1) / rowsForThisFace; // 0 to 1 from apex to base
+        
+        // s: position along the row (0 to 1), evenly spaced
+        const s = actualCardsInRow > 1 ? col / (actualCardsInRow - 1) : 0.5;
+        
+        // Interpolate along the base edge
+        const basePoint = new THREE.Vector3()
+          .addScaledVector(baseV1, 1 - s)
+          .addScaledVector(baseV2, s);
+        
+        // Interpolate from apex to base point
+        const position = new THREE.Vector3()
+          .addScaledVector(apex, 1 - t)
+          .addScaledVector(basePoint, t);
+        
+        // Push card slightly outward from face plane to prevent intersection
+        // This ensures cards don't touch even at edges where faces meet
+        const spacingOffset = 10;
+        const normalCopy = faceNormal.clone();
+        position.addScaledVector(normalCopy, spacingOffset);
+        
+        const object = new THREE.Object3D();
+        object.position.copy(position);
+        
+        // Make card face outward from the face plane (perpendicular to face)
+        // This gives a clean, architectural look
+        const lookAtPoint = new THREE.Vector3().addVectors(position, faceNormal.clone().multiplyScalar(200));
+        object.lookAt(lookAtPoint);
+        
+        targets.pyramid.push(object);
+        cardIndex++;
+        cardsPlacedOnFace++;
+      }
+    }
+  }
+}
+
+// TRIANGLE layout: 3D tetrahedron (4 triangular faces, no base)
+function createTargetsTriangle(count) {
+  targets.triangle = [];
+
+  // Regular tetrahedron: 4 vertices, 4 triangular faces, all edges equal
+  const tetraRadius = 1200; // Increased radius for better spacing
+  const cardSpacing = 0.15; // Spacing factor to prevent overlap (0-1, lower = more spacing)
+  
+  // 4 vertices of a regular tetrahedron
+  const v0 = new THREE.Vector3(1, 1, 1).normalize().multiplyScalar(tetraRadius);
+  const v1 = new THREE.Vector3(-1, -1, 1).normalize().multiplyScalar(tetraRadius);
+  const v2 = new THREE.Vector3(-1, 1, -1).normalize().multiplyScalar(tetraRadius);
+  const v3 = new THREE.Vector3(1, -1, -1).normalize().multiplyScalar(tetraRadius);
+
+  // 4 triangular faces of the tetrahedron
+  const tetraFaces = [
+    [v0, v1, v2], // Face 0: vertices 0, 1, 2
+    [v0, v1, v3], // Face 1: vertices 0, 1, 3
+    [v0, v2, v3], // Face 2: vertices 0, 2, 3
+    [v1, v2, v3], // Face 3: vertices 1, 2, 3
+  ];
+
+  // Distribute cards evenly across 4 faces
+  const faceCount = 4;
+  const cardsPerFace = Math.ceil(count / faceCount);
+
+  for (let i = 0; i < count; i++) {
+    const object = new THREE.Object3D();
+    
+    // Determine which face (0-3)
+    const faceIndex = Math.min(Math.floor(i / cardsPerFace), faceCount - 1);
+    const indexInFace = i % cardsPerFace;
+    const [a, b, c] = tetraFaces[faceIndex];
+
+    // Use triangular number pattern to calculate rows on each face
+    let rows = Math.ceil((Math.sqrt(8 * cardsPerFace + 1) - 1) / 2);
+
+    // Map indexInFace to row and column in triangular grid
+    let r = 0;
+    let acc = 0;
+    for (; r < rows; r++) {
+      const rowCount = r + 1;
+      if (indexInFace < acc + rowCount) break;
+      acc += rowCount;
+    }
+    const cIndex = indexInFace - acc;
+    const rowCountCurrent = r + 1;
+
+    // Adjust spacing to prevent overlap - use spacing factor
+    // Barycentric coordinates: row 0 is at vertex a, rows go towards edge b-c
+    // Add spacing offset to keep cards away from edges and vertices
+    const spacingOffset = cardSpacing / (rows + 1);
+    const t = rows <= 1 ? 0.5 : spacingOffset + (r / (rows - 1)) * (1 - 2 * spacingOffset); // Keep away from vertices
+    const s = rowCountCurrent <= 1 ? 0.5 : 
+      spacingOffset + (cIndex / (rowCountCurrent - 1)) * (1 - 2 * spacingOffset); // Keep away from edges
+
+    const u = 1 - t; // weight for vertex a
+    const v = t * (1 - s); // weight for vertex b
+    const w = t * s; // weight for vertex c
+
+    // Convert barycentric coords to 3D position on the face
+    // position = u*a + v*b + w*c where u + v + w = 1
+    const position = new THREE.Vector3()
+      .addScaledVector(a, u)
+      .addScaledVector(b, v)
+      .addScaledVector(c, w);
+
+    object.position.copy(position);
+
+    // Face outward from tetrahedron center
+    const lookAtVector = position.clone().multiplyScalar(2);
+    object.lookAt(lookAtVector);
+
+    targets.triangle.push(object);
+  }
+}
+
 // =============== CUSTOM TRANSFORMS (NO TWEEN LIB) ===============
 function transform(targetArray, duration) {
   transitions.length = 0;
@@ -389,8 +609,10 @@ function wireButtons() {
   const btnSphere = document.getElementById("btn-sphere");
   const btnHelix = document.getElementById("btn-helix");
   const btnGrid = document.getElementById("btn-grid");
+  const btnPyramid = document.getElementById("btn-pyramid");
+  const btnTriangle = document.getElementById("triangle");
 
-  const buttons = [btnTable, btnSphere, btnHelix, btnGrid];
+  const buttons = [btnTable, btnSphere, btnHelix, btnGrid, btnPyramid, btnTriangle];
 
   const setActiveButton = (active) => {
     buttons.forEach((btn) => {
@@ -418,6 +640,16 @@ function wireButtons() {
     console.log("GRID clicked");
     transform(targets.grid, 1100);
     setActiveButton(btnGrid);
+  });
+  btnPyramid?.addEventListener("click", () => {
+    console.log("PYRAMID clicked");
+    transform(targets.pyramid, 2000);
+    setActiveButton(btnPyramid);
+  });
+  btnTriangle?.addEventListener("click", () => {
+    console.log("TRIANGLE clicked");
+    transform(targets.triangle, 2000);
+    setActiveButton(btnTriangle);
   });
 
   setActiveButton(btnTable);
@@ -517,6 +749,8 @@ async function bootstrapApp() {
   createTargetsSphere(people.length);
   createTargetsHelix(people.length);
   createTargetsGrid(people.length);
+  createTargetsPyramid(people.length);
+  createTargetsTriangle(people.length);
 
   transform(targets.table, 1000);
   animate(performance.now());
